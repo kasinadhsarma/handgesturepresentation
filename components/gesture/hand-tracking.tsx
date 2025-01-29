@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
+import axios from 'axios'
 import '@/styles/gesture.css'
 
 export function HandTracking() {
@@ -81,4 +82,3 @@ export function HandTracking() {
     </div>
   )
 }
-

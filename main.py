@@ -2,6 +2,9 @@ from cvzone.HandTrackingModule import HandDetector
 import cv2
 import os
 import numpy as np
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import requests
 
 # Parameters
 width, height = 1280, 720
@@ -32,6 +35,28 @@ hs, ws = int(120 * 1), int(213 * 1)  # width and height of small image
 # Get list of presentation images
 pathImages = sorted(os.listdir(folderPath), key=len)
 print(pathImages)
+
+# Initialize FastAPI app
+app = FastAPI()
+
+# Configure CORS
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:8000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/gesture")
+async def receive_gesture(gesture: str):
+    print(f"Received gesture: {gesture}")
+    return {"message": "Gesture received"}
 
 while True:
     # Get image frame
@@ -95,6 +120,26 @@ while True:
                 annotations.pop(-1)
                 annotationNumber -= 1
                 buttonPressed = True
+
+        # Send gesture data to FastAPI endpoint
+        gesture = "none"
+        if fingers == [1, 0, 0, 0, 0]:
+            gesture = "left"
+        elif fingers == [0, 0, 0, 0, 1]:
+            gesture = "right"
+        elif fingers == [0, 1, 1, 0, 0]:
+            gesture = "draw"
+        elif fingers == [0, 1, 0, 0, 0]:
+            gesture = "annotate"
+        elif fingers == [0, 1, 1, 1, 0]:
+            gesture = "erase"
+
+        if gesture != "none":
+            try:
+                response = requests.post("http://localhost:8000/gesture", json={"gesture": gesture})
+                print(f"Gesture sent: {gesture}, Response: {response.json()}")
+            except Exception as e:
+                print(f"Error sending gesture: {e}")
 
     else:
         annotationStart = False
