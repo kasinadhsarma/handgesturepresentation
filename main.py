@@ -5,11 +5,14 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import requests
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 # Parameters
 width, height = 1280, 720
 gestureThreshold = 300
-folderPath = "Presentation"
+folderPath = "components/gesture"
 
 # Camera Setup
 cap = cv2.VideoCapture(0)
@@ -53,10 +56,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from pydantic import BaseModel
+
+class GestureRequest(BaseModel):
+    gesture: str
+
 @app.post("/gesture")
-async def receive_gesture(gesture: str):
-    print(f"Received gesture: {gesture}")
+async def receive_gesture(request: GestureRequest):
+    print(f"Received gesture: {request.gesture}")
     return {"message": "Gesture received"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 while True:
     # Get image frame

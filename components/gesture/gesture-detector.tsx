@@ -7,15 +7,13 @@ import '@/styles/gesture.css'
 import { useToast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
 import * as React from 'react'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 
-interface GestureDetectorProps {
-  onGesture: (gesture: string) => void
-}
+import { HandTracking } from './hand-tracking';
 
-export function GestureDetector({ onGesture }: GestureDetectorProps): React.ReactElement {
+export function GestureDetector(): React.ReactElement {
   const { toast } = useToast()
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [model, setModel] = useState<handpose.HandPose | null>(null)
   const [isVideoReady, setIsVideoReady] = useState(false)
@@ -35,7 +33,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
             frameRate: { ideal: 30 }
           }
         }
-        
+
         const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
 
         if (mounted && videoRef.current) {
@@ -43,7 +41,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
           videoRef.current.width = 320
           videoRef.current.height = 240
           streamRef.current = mediaStream
-          
+
           // Ensure video plays after loading
           await videoRef.current.play()
           setIsVideoReady(true)
@@ -81,7 +79,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
 
     video.addEventListener('loadeddata', handleVideoLoad)
     video.addEventListener('playing', handleVideoLoad)
-    
+
     return () => {
       video.removeEventListener('loadeddata', handleVideoLoad)
       video.removeEventListener('playing', handleVideoLoad)
@@ -102,7 +100,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
     loadModel()
   }, [])
 
-  const interpretGesture = useCallback(async (landmarks: number[][]): Promise<string> => {
+  const interpretGesture = useCallback((landmarks: number[][]): string => {
     // Simple gesture detection based on finger positions
     const thumbTip = landmarks[4]
     const indexTip = landmarks[8]
@@ -115,16 +113,14 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
     )
     const threshold = handSize * 0.2 // 20% of hand size
 
-    let gesture = 'none'
-
     if (thumbTip[1] < indexTip[1] - threshold && thumbTip[1] < middleTip[1] - threshold) {
       console.log('Detected: next')
-      gesture = 'next'
+      return 'next'
     } else if (thumbTip[1] > indexTip[1] + threshold && thumbTip[1] > middleTip[1] + threshold) {
       console.log('Detected: previous')
-      gesture = 'previous'
+      return 'previous'
     } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20) {
-      gesture = 'click'
+      return 'click'
     }
 
     // New gesture detection logic
@@ -132,43 +128,46 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
     const pinkyTip = landmarks[20]
 
     if (thumbTip[0] < indexTip[0] && thumbTip[0] < middleTip[0] && thumbTip[0] < ringTip[0] && thumbTip[0] < pinkyTip[0]) {
-      gesture = 'zoomIn'
+      return 'zoomIn'
     } else if (thumbTip[0] > indexTip[0] && thumbTip[0] > middleTip[0] && thumbTip[0] > ringTip[0] && thumbTip[0] > pinkyTip[0]) {
-      gesture = 'zoomOut'
+      return 'zoomOut'
     } else if (Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
-      gesture = 'shape'
+      return 'shape'
     }
 
     // Additional gesture detection logic
     if (Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
-      gesture = 'pointer'
+      return 'pointer'
     } else if (Math.abs(indexTip[1] - middleTip[1]) < 20 && Math.abs(middleTip[1] - ringTip[1]) < 20 && Math.abs(ringTip[1] - pinkyTip[1]) < 20) {
-      gesture = 'highlight'
+      return 'highlight'
     } else if (thumbTip[1] < indexTip[1] && thumbTip[1] < middleTip[1] && thumbTip[1] < ringTip[1] && thumbTip[1] < pinkyTip[1]) {
-      gesture = 'stop'
+      return 'stop'
     } else if (thumbTip[1] > indexTip[1] && thumbTip[1] > middleTip[1] && thumbTip[1] > ringTip[1] && thumbTip[1] > pinkyTip[1]) {
-      gesture = 'firstSlide'
+      return 'firstSlide'
     } else if (thumbTip[1] < indexTip[1] && thumbTip[1] < middleTip[1] && thumbTip[1] < ringTip[1] && thumbTip[1] < pinkyTip[1]) {
-      gesture = 'lastSlide'
+      return 'lastSlide'
     } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20 && Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
-      gesture = 'undo'
+      return 'undo'
     } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20 && Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
-      gesture = 'redo'
+      return 'redo'
     } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20 && Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
-      gesture = 'save'
+      return 'save'
     }
 
-    if (gesture !== 'none') {
-      try {
-        const response = await axios.post('http://localhost:8000/gesture', { gesture })
-        console.log(`Gesture sent: ${gesture}, Response: ${response.data}`)
-      } catch (error) {
-        console.error('Error sending gesture:', error)
-      }
-    }
-
-    return gesture
+    return 'none'
   }, [])
+
+const handleGesture = useCallback((gesture: string) => {
+  if (gesture !== 'none') {
+    axios.post<{ message: string }>('http://localhost:8000/gesture', { gesture })
+      .then(response => {
+        console.log('Gesture sent successfully:', response.data)
+      })
+      .catch((error: AxiosError) => {
+        console.error('Error sending gesture:', error)
+      })
+  }
+}, [])
 
   // Detect hands
   useEffect(() => {
@@ -183,13 +182,13 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
       try {
         if (videoRef.current.readyState === 4) {
           const predictions = await model.estimateHands(videoRef.current)
-          
+
           if (predictions.length > 0) {
-            const gesture = await interpretGesture(predictions[0].landmarks)
-            
+            const gesture = interpretGesture(predictions[0].landmarks)
+
             if (gesture !== 'none') {
               console.log('Detected gesture:', gesture)
-              onGesture(gesture)
+              handleGesture(gesture)
             }
           }
         }
@@ -212,7 +211,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
         cancelAnimationFrame(animationFrameId)
       }
     }
-  }, [model, onGesture, interpretGesture, isVideoReady])
+  }, [model, handleGesture, interpretGesture, isVideoReady])
 
   useEffect(() => {
     return () => {
@@ -226,6 +225,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
 
   return (
     <div className="relative">
+      <HandTracking videoRef={videoRef} streamRef={streamRef} />
       <div className="video-container">
         <video
           ref={videoRef}
@@ -241,7 +241,7 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
               <div className="text-white text-sm">Initializing camera...</div>
             </div>
           )}
-          
+
           {/* Status indicator */}
           <div className="absolute top-2 left-2 flex items-center gap-2">
             <div className={cn(
@@ -277,4 +277,3 @@ export function GestureDetector({ onGesture }: GestureDetectorProps): React.Reac
     </div>
   )
 }
-

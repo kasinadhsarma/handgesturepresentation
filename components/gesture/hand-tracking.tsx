@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import axios from 'axios'
 import '@/styles/gesture.css'
 
-export function HandTracking() {
-  const videoRef = useRef<HTMLVideoElement>(null)
+interface HandTrackingProps {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  streamRef: React.RefObject<MediaStream | null>;
+}
+
+export function HandTracking({ videoRef, streamRef }: HandTrackingProps) {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
