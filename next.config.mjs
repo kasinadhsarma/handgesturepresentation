@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
+  /* config options here */
 };
 
 export default nextConfig;

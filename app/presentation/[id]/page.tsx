@@ -1,34 +1,85 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { use } from 'react'
 import { SlideViewer } from '@/components/presentation/slide-viewer'
 import { SlideControls } from '@/components/presentation/slide-controls'
 import { GestureDetector } from '@/components/gesture/gesture-detector'
+import { GestureVisualization } from '@/components/gesture/gesture-visualization'
 import { Whiteboard } from '@/components/whiteboard/whiteboard'
 import { ColorPicker } from '@/components/whiteboard/color-picker'
 import { ToolsPanel } from '@/components/whiteboard/tools-panel'
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { Save, RotateCcw, RotateCw } from 'lucide-react'
 
 const GestureGuide = () => (
   <div className="fixed bottom-28 left-8 bg-white/95 p-5 rounded-xl shadow-xl backdrop-blur-sm z-50 border border-gray-100">
     <h3 className="font-bold mb-4 text-lg">Gesture Guide</h3>
-    <ul className="text-sm space-y-3">
-      <li className="flex items-center gap-3 text-gray-700">
-        <span className="text-xl">👆</span>
-        <span>Next slide</span>
-      </li>
-      <li className="flex items-center gap-3 text-gray-700">
-        <span className="text-xl">👇</span>
-        <span>Previous slide</span>
-      </li>
-      <li className="flex items-center gap-3 text-gray-700">
-        <span className="text-xl">✌️</span>
-        <span>Toggle drawing</span>
-      </li>
-    </ul>
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <h4 className="font-medium text-sm text-gray-600 mb-2">Navigation</h4>
+        <ul className="text-sm space-y-3">
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">👆</span>
+            <span>Next slide</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">👇</span>
+            <span>Previous slide</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">👈</span>
+            <span>First slide</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">👉</span>
+            <span>Last slide</span>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <h4 className="font-medium text-sm text-gray-600 mb-2">Drawing Tools</h4>
+        <ul className="text-sm space-y-3">
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">✌️</span>
+            <span>Toggle drawing</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">👊</span>
+            <span>Pointer mode</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">🖐️</span>
+            <span>Eraser</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">✋</span>
+            <span>Highlighter</span>
+          </li>
+        </ul>
+      </div>
+      <div>
+        <h4 className="font-medium text-sm text-gray-600 mb-2">Actions</h4>
+        <ul className="text-sm space-y-3">
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">↩️</span>
+            <span>Undo</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">↪️</span>
+            <span>Redo</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">💾</span>
+            <span>Save</span>
+          </li>
+          <li className="flex items-center gap-3 text-gray-700">
+            <span className="text-xl">⭕</span>
+            <span>Draw circle</span>
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 )
 
@@ -44,8 +95,7 @@ const SlideCounter = ({ current, total }: { current: number; total: number }) =>
   </div>
 )
 
-export default function PresentationPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function PresentationPage({ params }: { params: { id: string } }) {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [totalSlides, setTotalSlides] = useState(0)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -65,10 +115,10 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
       }
     }
 
-    if (resolvedParams?.id) {
+    if (params.id) {
       fetchPresentationData()
     }
-  }, [resolvedParams?.id])
+  }, [params.id])
 
   const toggleDrawing = useCallback(() => {
     setIsDrawing((prev) => !prev)
@@ -76,14 +126,17 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
   }, [])
 
   const handleSave = useCallback(() => {
-    toast({
+    toast("Slide saved successfully", "success", {
       title: "Slide Saved",
-      description: "Your current slide and annotations have been saved.",
+      description: "Your current slide and annotations have been saved."
     })
   }, [toast])
 
+  const [currentGesture, setCurrentGesture] = useState<string>('')
+  
   const handleGesture = useCallback((gesture: string) => {
     console.log('Processing gesture:', gesture)
+    setCurrentGesture(gesture)
     
     switch (gesture) {
       case 'next':
@@ -92,9 +145,9 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
           console.log(`Moving to next slide: ${newSlide}`)
           return newSlide
         })
-        toast({
+        toast("Moving to next slide", "info", {
           title: "Navigation",
-          description: "Next slide",
+          description: "Next slide"
         })
         break
       case 'previous':
@@ -103,9 +156,9 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
           console.log(`Moving to previous slide: ${newSlide}`)
           return newSlide
         })
-        toast({
+        toast("Moving to previous slide", "info", {
           title: "Navigation",
-          description: "Previous slide",
+          description: "Previous slide"
         })
         break
       case 'click':
@@ -174,10 +227,10 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
         <div className="fixed top-0 inset-x-0 h-12 bg-gradient-to-b from-black/20 to-transparent pointer-events-none" />
         
         <div className="relative w-full max-w-6xl h-[80vh] rounded-2xl overflow-hidden">
-          {resolvedParams?.id && (
+          {params.id && (
             <>
               <SlideViewer 
-                id={resolvedParams.id} 
+                id={params.id} 
                 currentSlide={currentSlide} 
                 totalSlides={totalSlides} 
               />
@@ -231,6 +284,9 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      {/* Gesture Visualization */}
+      <GestureVisualization gesture={currentGesture} />
+
       {/* Left sidebar with tools and gesture guide */}
       <div className="fixed top-8 left-8 flex flex-col gap-4 z-[60] w-[250px]">
         <div className="bg-white/95 p-5 rounded-xl shadow-xl backdrop-blur-sm border border-gray-100">
@@ -253,7 +309,7 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
       <div className="fixed top-8 right-8 z-[60] flex flex-col gap-4">
         <div className="bg-white/95 p-3 rounded-xl shadow-xl backdrop-blur-sm border border-gray-100">
           <h3 className="font-medium mb-2 text-gray-700 text-sm">Hand Gesture Control</h3>
-          <GestureDetector onGesture={handleGesture} presentationId={resolvedParams.id} />
+          <GestureDetector onGesture={handleGesture} presentationId={params.id} />
         </div>
       </div>
     </div>
