@@ -1,43 +1,68 @@
-.video-container {
+.video-feed {
   width: 320px;
   height: 240px;
-  background: black;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  position: relative;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-}
-
-.video-feed {
-  width: 100%;
-  height: 100%;
+  border-radius: 8px;
+  background-color: #000;
   object-fit: cover;
-  transform: scaleX(-1); /* Mirror the video */
-  filter: brightness(1.1) contrast(1.1);
 }
 
-/* Status indicator animations */
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.viz-frame {
+  width: 320px;
+  height: 240px;
+  border-radius: 8px;
+  background-color: #f4f4f4;
+  object-fit: cover;
+}
+
+.gesture-indicator {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.connection-status {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .status-indicator {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
 }
 
-/* Gesture quick reference styles */
-.gesture-reference {
-  background: white/95;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border-radius: 0.5rem;
-  padding: 0.5rem;
-  font-size: 0.75rem;
-  line-height: 1rem;
+.status-indicator.connected {
+  background-color: #22C55E;
 }
 
-.gesture-icon {
-  font-size: 1.25rem;
-  line-height: 1;
+.status-indicator.disconnected {
+  background-color: #EF4444;
+}
+
+.status-indicator.connecting {
+  background-color: #F59E0B;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
 }

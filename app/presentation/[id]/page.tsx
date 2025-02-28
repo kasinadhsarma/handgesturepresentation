@@ -253,10 +253,9 @@ export default function PresentationPage({ params }: { params: Promise<{ id: str
       <div className="fixed top-8 right-8 z-[60] flex flex-col gap-4">
         <div className="bg-white/95 p-3 rounded-xl shadow-xl backdrop-blur-sm border border-gray-100">
           <h3 className="font-medium mb-2 text-gray-700 text-sm">Hand Gesture Control</h3>
-          <GestureDetector onGesture={handleGesture} />
+          <GestureDetector onGesture={handleGesture} presentationId={resolvedParams.id} />
         </div>
       </div>
     </div>
   )
 }
-
