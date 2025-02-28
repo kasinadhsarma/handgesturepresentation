@@ -1,0 +1,51 @@
+import { ToolsPanel } from '@/components/whiteboard/tools-panel'
+import { Button } from "@/components/ui/button"
+import { useToast } from '@/hooks/use-toast'
+import { Save, RotateCcw, RotateCw } from 'lucide-react'
+
+const GestureGuide = () => {
+  const { toast } = useToast()
+
+  const handleSave = () => {
+    toast({
+      title: "Save",
+      description: "Your changes have been saved.",
+    })
+  }
+
+  const handleUndo = () => {
+    toast({
+      title: "Undo",
+      description: "Your last action has been undone.",
+    })
+  }
+
+  const handleRedo = () => {
+    toast({
+      title: "Redo",
+      description: "Your last undone action has been redone.",
+    })
+  }
+
+  return (
+    <div className="gesture-guide">
+      <ToolsPanel />
+      <div className="actions">
+        <Button onClick={handleSave}>
+          <Save className="mr-2 h-4 w-4" />
+          Save
+        </Button>
+        <Button onClick={handleUndo}>
+          <RotateCcw className="mr-2 h-4 w-4" />
+          Undo
+        </Button>
+        <Button onClick={handleRedo}>
+          <RotateCw className="mr-2 h-4 w-4" />
+          Redo
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export default GestureGuide
