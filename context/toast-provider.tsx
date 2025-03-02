@@ -7,25 +7,17 @@ interface ToastProviderProps {
   children: React.ReactNode
 }
 
-interface ToastOptions {
-  duration?: number
-  title?: string
-  description?: string
-  position?: 'top' | 'bottom'
-}
-
 interface Toast {
   id: string
-  message: string
-  type: ToastType
+  variant: ToastType
   title?: string
-  description?: string
+  description: string
   duration: number
   position: 'top' | 'bottom'
 }
 
 interface ToastContextValue {
-  addToast: (message: string, type?: ToastType, options?: ToastOptions) => void
+  addToast: (options: { variant?: ToastType; title?: string; description: string; duration?: number; position?: 'top' | 'bottom' }) => void
   dismissToast: (id: string) => void
   toasts: Toast[]
 }
@@ -39,19 +31,15 @@ export function ToastProvider({ children }: ToastProviderProps) {
     setToasts((current) => current.filter((toast) => toast.id !== id))
   }, [])
 
-  const addToast = useCallback((
-    message: string, 
-    type: ToastType = 'info', 
-    options: ToastOptions = {}
-  ) => {
+  const addToast = useCallback((options: { variant?: ToastType; title?: string; description: string; duration?: number; position?: 'top' | 'bottom' }) => {
     const id = Date.now().toString()
     const toast: Toast = {
       id,
-      message,
-      type,
+      variant: options.variant || 'default',
       duration: options.duration || 5000,
       position: options.position || 'bottom',
-      title: options.title
+      title: options.title,
+      description: options.description
     }
 
     setToasts((current) => [...current, toast])

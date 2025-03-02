@@ -1,504 +1,269 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import * as handpose from '@tensorflow-models/handpose'
+import '@tensorflow/tfjs-backend-webgl'
 import '@/styles/gesture.css'
-import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
+import { useToast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils"
 import * as React from 'react'
-import Image from 'next/image'
 
 interface GestureDetectorProps {
-  onGesture: (gesture: string, coords?: [number, number]) => void
-  presentationId: string
+  onGesture: (gesture: string) => void
 }
 
-export function GestureDetector({ onGesture, presentationId }: GestureDetectorProps) {
+export function GestureDetector({ onGesture }: GestureDetectorProps): React.ReactElement {
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const [model, setModel] = useState<handpose.HandPose | null>(null)
   const [isVideoReady, setIsVideoReady] = useState(false)
   const [isDetecting, setIsDetecting] = useState(false)
-  const [currentMode, setCurrentMode] = useState<string>("presentation")
-  const frameIntervalRef = useRef<number>(1000 / 30) // 30 fps
-  const lastFrameTimeRef = useRef<number>(0)
-  const [vizFrameSrc, setVizFrameSrc] = useState<string>("/placeholder-viz.png")
-  const [isClient, setIsClient] = useState(false)
 
+  // Initialize video stream with explicit dimensions
   useEffect(() => {
-    setIsClient(true)
-  }, [])
-
-  const memoizedOnGesture = useCallback(onGesture, [onGesture])
-  
-  useEffect(() => {
-    if (!isClient) return
-    
-    let ws: WebSocket | null = null
-    let reconnectTimeout: NodeJS.Timeout
-    let heartbeatTimeout: NodeJS.Timeout
-    let reconnectAttempts = 0
-    const maxReconnectAttempts = 10
-    const baseDelay = 1000
-    const maxDelay = 8000
-    const heartbeatInterval = 3000
-
-    const handleHeartbeat = () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return
-
-      try {
-        ws.send(JSON.stringify({ type: 'heartbeat' }))
-        heartbeatTimeout = setTimeout(handleHeartbeat, heartbeatInterval)
-      } catch (e) {
-        console.error('Failed to send heartbeat:', e)
-      }
-    }
-
-    const connect = () => {
-      if (reconnectAttempts >= maxReconnectAttempts) {
-        toast('Could not establish connection to gesture detection service after multiple attempts.', 'error')
-        setIsDetecting(false)
-        return
-      }
-
-      if (wsRef.current) {
-        try {
-          wsRef.current.close()
-        } catch (e) {
-          console.error('Error closing existing connection:', e)
-        }
-        wsRef.current = null
-      }
-
-      try {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const host = window.location.hostname
-        const port = window.location.hostname === 'localhost' ? ':8000' : ''
-        const wsUrl = `${protocol}//${host}${port}/ws/gesture_control/${presentationId}`
-
-        ws = new WebSocket(wsUrl)
-        
-        if ('binaryType' in ws) {
-          ws.binaryType = 'arraybuffer'
-        }
-
-        const connectionTimeout = setTimeout(() => {
-          if (ws && ws.readyState !== WebSocket.OPEN) {
-            console.log('Connection timeout - retrying...')
-            try {
-              ws.close()
-            } catch (e) {
-              console.error('Error closing WebSocket:', e)
-            }
-            reconnectAttempts++
-            connect()
-          }
-        }, 5000)
-
-        ws.onopen = () => {
-          clearTimeout(connectionTimeout)
-          setIsDetecting(true)
-          reconnectAttempts = 0
-          handleHeartbeat()
-          
-          setTimeout(() => {
-            try {
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'hello', client: 'web' }))
-              }
-            } catch (e) {
-              console.error('Failed to send initial message:', e)
-            }
-          }, 500)
-        }
-
-        ws.onclose = () => {
-          setIsDetecting(false)
-          clearTimeout(heartbeatTimeout)
-
-          if (reconnectAttempts < maxReconnectAttempts) {
-            const delay = Math.min(baseDelay * Math.pow(1.5, reconnectAttempts), maxDelay)
-            reconnectTimeout = setTimeout(() => {
-              reconnectAttempts++
-              connect()
-            }, delay)
-          }
-        }
-
-        ws.onerror = () => {
-          console.error('WebSocket error occurred')
-        }
-
-        ws.onmessage = (event: MessageEvent) => {
-          try {
-            if (event.data === "ping") {
-              try {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                  ws.send("pong")
-                }
-                return
-              } catch (e) {
-                console.error('Failed to respond to ping:', e)
-                return
-              }
-            }
-
-            const response = JSON.parse(event.data)
-
-        if (response.type === 'error') {
-          console.error('Server error:', response.message)
-          toast(response.message, 'error')
-          return
-        }
-
-            if (response.type === 'heartbeat') return
-
-            if (response.viz_frame) {
-              const frameSrc = `data:image/jpeg;base64,${response.viz_frame}`
-              setVizFrameSrc((prev) => (prev !== frameSrc ? frameSrc : prev))
-            }
-
-            if (response.current_mode && response.current_mode !== currentMode) {
-              setCurrentMode(response.current_mode)
-            }
-
-            if (response.gesture && response.gesture !== 'none') {
-              if (response.coordinates) {
-                memoizedOnGesture(response.gesture, response.coordinates)
-              } else {
-                memoizedOnGesture(response.gesture)
-              }
-
-              if (response.message) {
-              toast(
-                isDetecting ? `${response.gesture}: ${response.message}` : "Gesture detection is not active - check connection",
-                isDetecting ? 'info' : 'warning'
-              )
-              }
-            }
-          } catch (error) {
-            console.error('Error parsing gesture response:', error)
-          }
-        }
-
-        wsRef.current = ws
-      } catch (error) {
-        console.error('Error creating WebSocket:', error)
-        reconnectTimeout = setTimeout(() => {
-          reconnectAttempts++
-          connect()
-        }, baseDelay)
-      }
-    }
-
-    const initialConnectionTimeout = setTimeout(() => {
-      connect()
-    }, 2000)
-
-    return () => {
-      clearTimeout(initialConnectionTimeout)
-      clearTimeout(reconnectTimeout)
-      clearTimeout(heartbeatTimeout)
-      if (ws) {
-        try {
-          ws.close()
-        } catch (e) {
-          console.error('Error during cleanup:', e)
-        }
-      }
-    }
-  }, [presentationId, toast, memoizedOnGesture, currentMode, isDetecting, isClient])
-
-  useEffect(() => {
-    if (!isClient) return
-    
     let mounted = true
-    let retryCount = 0
-    const maxRetries = 3
 
     async function setupCamera() {
       try {
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop())
-          streamRef.current = null
-        }
-
         const constraints = {
           video: {
             width: 320,
             height: 240,
             facingMode: 'user',
-            frameRate: { ideal: 30 },
-          },
+            frameRate: { ideal: 30 }
+          }
         }
-
+        
         const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
 
-        if (!mounted) {
-          mediaStream.getTracks().forEach(track => track.stop())
-          return
-        }
-
-        if (videoRef.current) {
-          const videoElement = videoRef.current
-          videoElement.srcObject = null
-          
-          videoElement.srcObject = mediaStream
-          videoElement.width = 320
-          videoElement.height = 240
+        if (mounted && videoRef.current) {
+          videoRef.current.srcObject = mediaStream
+          videoRef.current.width = 320
+          videoRef.current.height = 240
           streamRef.current = mediaStream
-
-          try {
-            await videoElement.play()
-            setIsVideoReady(true)
-          } catch (playError) {
-            if (retryCount < maxRetries) {
-              retryCount++
-              setTimeout(setupCamera, 1000)
-            } else {
-              console.error('Failed to play video after retries:', playError)
-              toast('Could not play camera stream. Please refresh the page.', 'error')
-            }
-          }
+          
+          // Ensure video plays after loading
+          await videoRef.current.play()
+          setIsVideoReady(true)
         }
       } catch (error) {
         console.error('Error accessing camera:', error)
-        toast('Could not access camera. Please check permissions.', 'error')
+        toast({
+          title: "Camera Error",
+          description: "Could not access camera. Please check permissions.",
+        })
       }
     }
 
-    const cameraSetupTimeout = setTimeout(() => {
-      setupCamera()
-    }, 1000)
+    setupCamera()
 
     return () => {
       mounted = false
-      clearTimeout(cameraSetupTimeout)
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach(track => track.stop())
         streamRef.current = null
       }
     }
-  }, [toast, isClient])
+  }, [toast]) // Add toast to dependency array
 
-  const processVideoFrame = useCallback(async () => {
-    if (
-      !isClient ||
-      !videoRef.current ||
-      !canvasRef.current ||
-      !isVideoReady ||
-      !wsRef.current ||
-      wsRef.current.readyState !== WebSocket.OPEN
-    )
-      return
-
-    const currentTime = performance.now()
-    const timeSinceLastFrame = currentTime - lastFrameTimeRef.current
-
-    if (timeSinceLastFrame < frameIntervalRef.current) return
-
-    lastFrameTimeRef.current = currentTime
-
-    try {
-      const video = videoRef.current
-      const canvas = canvasRef.current
-      const context = canvas.getContext('2d')
-
-      if (!context) return
-
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-      }
-
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-      canvas.toBlob(
-        (blob) => {
-          if (!blob || blob.size < 1000) return
-          
-          const reader = new FileReader()
-          reader.onload = async (e) => {
-            if (e.target?.result && wsRef.current?.readyState === WebSocket.OPEN) {
-              try {
-                wsRef.current.send(e.target.result)
-              } catch (error) {
-                console.error('Error sending frame:', error)
-              }
-            }
-          }
-          reader.readAsArrayBuffer(blob)
-        },
-        'image/jpeg',
-        0.6
-      )
-    } catch (error) {
-      console.error('Error in processVideoFrame:', error)
-    }
-  }, [isVideoReady, isClient])
-
+  // Handle video loaded
   useEffect(() => {
-    if (!isClient || !isVideoReady || !videoRef.current) return
+    const video = videoRef.current
+    if (!video) return
+
+    const handleVideoLoad = () => {
+      if (video.readyState === 4) { // HAVE_ENOUGH_DATA
+        setIsVideoReady(true)
+      }
+    }
+
+    video.addEventListener('loadeddata', handleVideoLoad)
+    video.addEventListener('playing', handleVideoLoad)
+    
+    return () => {
+      video.removeEventListener('loadeddata', handleVideoLoad)
+      video.removeEventListener('playing', handleVideoLoad)
+    }
+  }, [])
+
+  // Load handpose model
+  useEffect(() => {
+    async function loadModel() {
+      try {
+        const loadedModel = await handpose.load()
+        setModel(loadedModel)
+        console.log('Handpose model loaded')
+      } catch (error) {
+        console.error('Error loading handpose model:', error)
+      }
+    }
+    loadModel()
+  }, [])
+
+  const interpretGesture = useCallback((landmarks: number[][]): string => {
+    // Simple gesture detection based on finger positions
+    const thumbTip = landmarks[4]
+    const indexTip = landmarks[8]
+    const middleTip = landmarks[12]
+
+    // Calculate relative distances to make gestures more reliable
+    const handSize = Math.hypot(
+      landmarks[0][0] - landmarks[5][0],
+      landmarks[0][1] - landmarks[5][1]
+    )
+    const threshold = handSize * 0.2 // 20% of hand size
+
+    if (thumbTip[1] < indexTip[1] - threshold && thumbTip[1] < middleTip[1] - threshold) {
+      console.log('Detected: next')
+      return 'next'
+    } else if (thumbTip[1] > indexTip[1] + threshold && thumbTip[1] > middleTip[1] + threshold) {
+      console.log('Detected: previous')
+      return 'previous'
+    } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20) {
+      return 'click'
+    }
+
+    // New gesture detection logic
+    const ringTip = landmarks[16]
+    const pinkyTip = landmarks[20]
+
+    if (thumbTip[0] < indexTip[0] && thumbTip[0] < middleTip[0] && thumbTip[0] < ringTip[0] && thumbTip[0] < pinkyTip[0]) {
+      return 'zoomIn'
+    } else if (thumbTip[0] > indexTip[0] && thumbTip[0] > middleTip[0] && thumbTip[0] > ringTip[0] && thumbTip[0] > pinkyTip[0]) {
+      return 'zoomOut'
+    } else if (Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
+      return 'shape'
+    }
+
+    // Additional gesture detection logic
+    if (Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
+      return 'pointer'
+    } else if (Math.abs(indexTip[1] - middleTip[1]) < 20 && Math.abs(middleTip[1] - ringTip[1]) < 20 && Math.abs(ringTip[1] - pinkyTip[1]) < 20) {
+      return 'highlight'
+    } else if (thumbTip[1] < indexTip[1] && thumbTip[1] < middleTip[1] && thumbTip[1] < ringTip[1] && thumbTip[1] < pinkyTip[1]) {
+      return 'stop'
+    } else if (thumbTip[1] > indexTip[1] && thumbTip[1] > middleTip[1] && thumbTip[1] > ringTip[1] && thumbTip[1] > pinkyTip[1]) {
+      return 'firstSlide'
+    } else if (thumbTip[1] < indexTip[1] && thumbTip[1] < middleTip[1] && thumbTip[1] < ringTip[1] && thumbTip[1] < pinkyTip[1]) {
+      return 'lastSlide'
+    } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20 && Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
+      return 'undo'
+    } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20 && Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
+      return 'redo'
+    } else if (Math.abs(thumbTip[0] - indexTip[0]) < 20 && Math.abs(indexTip[0] - middleTip[0]) < 20 && Math.abs(middleTip[0] - ringTip[0]) < 20 && Math.abs(ringTip[0] - pinkyTip[0]) < 20) {
+      return 'save'
+    }
+
+    return 'none'
+  }, [])
+
+  // Detect hands
+  useEffect(() => {
+    if (!model || !isVideoReady || !videoRef.current) return
 
     let isDetecting = true
     let animationFrameId: number
 
-    const detectGestures = async () => {
-      if (!isDetecting || !videoRef.current) return
+    const detectHands = async () => {
+      if (!isDetecting || !videoRef.current || !model) return
 
       try {
-        await processVideoFrame()
-        animationFrameId = requestAnimationFrame(detectGestures)
+        if (videoRef.current.readyState === 4) {
+          const predictions = await model.estimateHands(videoRef.current)
+          
+          if (predictions.length > 0) {
+            const gesture = interpretGesture(predictions[0].landmarks)
+            
+            if (gesture !== 'none') {
+              console.log('Detected gesture:', gesture)
+              onGesture(gesture)
+            }
+          }
+        }
+
+        if (isDetecting) {
+          animationFrameId = requestAnimationFrame(detectHands)
+        }
       } catch (error) {
-        console.error('Error in gesture detection:', error)
+        console.error('Error in hand detection:', error)
       }
     }
 
-    detectGestures()
+    detectHands()
+    setIsDetecting(true)
 
     return () => {
       isDetecting = false
+      setIsDetecting(false)
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
     }
-  }, [isVideoReady, processVideoFrame, isClient])
+  }, [model, onGesture, interpretGesture, isVideoReady])
 
-  if (!isClient) {
-    return <div className="min-h-[400px] bg-gray-100 rounded-lg" />
-  }
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current = null
+      }
+      // ...existing cleanup...
+    }
+  }, [])
 
   return (
     <div className="relative">
-      <div className="video-container relative">
-        <div className="flex flex-row gap-2">
-          <div className="relative">
-            <video
-              ref={videoRef}
-              className="video-feed rounded-lg"
-              autoPlay
-              playsInline
-              muted
-            />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-            <div className="absolute inset-0 pointer-events-none">
-              {!isVideoReady && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
-                  <div className="text-white text-sm">Initializing camera...</div>
-                </div>
-              )}
-
-              <div
-                className={cn(
-                  "absolute top-2 left-2 px-2 py-1 rounded-md text-xs font-medium text-white",
-                  currentMode === "presentation" ? "bg-blue-500" : "bg-green-500"
-                )}
-              >
-                {currentMode === "presentation" ? "Presentation" : "Annotation"}
-              </div>
-
-              <div className="absolute bottom-2 left-2 flex items-center gap-2">
-                <div
-                  className={cn(
-                    "w-2 h-2 rounded-full transition-colors duration-200",
-                    isDetecting ? "bg-green-500" : "bg-yellow-500"
-                  )}
-                />
-                <span className="text-xs text-white font-medium">
-                  {isDetecting ? "Detecting" : "Connecting..."}
-                </span>
-              </div>
+      <div className="video-container">
+        <video
+          ref={videoRef}
+          className="video-feed"
+          autoPlay
+          playsInline
+          muted
+        />
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Loading overlay */}
+          {!isVideoReady && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="text-white text-sm">Initializing camera...</div>
             </div>
-          </div>
-
-          <div className="relative">
-            <div className="relative w-[320px] h-[240px]">
-              <Image
-                src={vizFrameSrc}
-                alt="Gesture visualization"
-                className="viz-frame rounded-lg"
-                fill
-                sizes="320px"
-                style={{ objectFit: 'cover' }}
-              />
-            </div>
-            <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-black/60 text-xs font-medium text-white">
-              Gesture Visualization
-            </div>
+          )}
+          
+          {/* Status indicator */}
+          <div className="absolute top-2 left-2 flex items-center gap-2">
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              isDetecting ? "bg-green-500" : "bg-yellow-500"
+            )} />
+            <span className="text-xs text-white font-medium">
+              {isDetecting ? "Detecting Gestures" : "Initializing ML Model..."}
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="mt-2 bg-white/90 rounded-lg p-2 shadow-sm border border-gray-100">
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="col-span-2">
-            <h4 className="font-medium text-gray-700 mb-1">Navigation</h4>
-            <div className="grid grid-cols-2 gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👆</span>
-                <span className="text-gray-600">Next slide</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👇</span>
-                <span className="text-gray-600">Previous slide</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">☝️</span>
-                <span className="text-gray-600">First slide</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">✋</span>
-                <span className="text-gray-600">Last slide</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-span-2 mt-2">
-            <h4 className="font-medium text-gray-700 mb-1">Drawing Tools</h4>
-            <div className="grid grid-cols-2 gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">✌️</span>
-                <span className="text-gray-600">Draw mode</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🤚</span>
-                <span className="text-gray-600">Erase mode</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👈</span>
-                <span className="text-gray-600">Pointer</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">✍️</span>
-                <span className="text-gray-600">Highlight</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-span-2 mt-2">
-            <h4 className="font-medium text-gray-700 mb-1">Actions</h4>
-            <div className="grid grid-cols-2 gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">↩️</span>
-                <span className="text-gray-600">Undo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">↪️</span>
-                <span className="text-gray-600">Redo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">✊</span>
-                <span className="text-gray-600">Save</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🤚</span>
-                <span className="text-gray-600">Stop</span>
-              </div>
-            </div>
-          </div>
+      {/* Quick gesture reference */}
+      <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
+        <div className="flex items-center gap-1">
+          <span>👆</span>
+          <span className="text-gray-600">Next</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span>👇</span>
+          <span className="text-gray-600">Previous</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span>✌️</span>
+          <span className="text-gray-600">Draw</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span>✋</span>
+          <span className="text-gray-600">Erase</span>
         </div>
       </div>
     </div>
   )
 }
+
+

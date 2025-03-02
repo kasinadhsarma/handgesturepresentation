@@ -82,84 +82,75 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Main Content */}
+        {/* Updated Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Upload and Settings Column */}
+          {/* Left Column: Upload and Gesture Guide */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Upload Card */}
+            {/* Upload Section */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Upload New</h2>
+              <h2 className="text-xl font-semibold mb-4">Upload Presentation</h2>
               <PresentationUpload />
             </div>
 
-            {/* Gesture Settings */}
-            {dashboardStats && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold mb-4">Gesture Preferences</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Gesture Speed
-                    </label>
-                    <select 
-                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                      value={dashboardStats?.preferences?.gestureSpeed}
-                      onChange={async (e) => {
-                        const response = await fetch('/api/dashboard', {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            preferences: {
-                              ...dashboardStats.preferences,
-                              gestureSpeed: e.target.value
-                            }
-                          })
-                        })
-                        if (response.ok) {
-                          // Refresh dashboard data
-                          const { stats } = await (await fetch('/api/dashboard')).json()
-                          setDashboardStats(stats)
-                        }
-                      }}
-                    >
-                      <option value="slow">Slow</option>
-                      <option value="medium">Medium</option>
-                      <option value="fast">Fast</option>
-                    </select>
+            {/* New Gesture Guide Section */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Gesture Guide</h2>
+              <div className="space-y-6">
+                <div>
+                  <h3 className="font-medium text-sm text-gray-600 mb-2">Navigation</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { emoji: "👆", text: "Next slide" },
+                      { emoji: "👇", text: "Previous slide" },
+                      { emoji: "👈", text: "First slide" },
+                      { emoji: "👉", text: "Last slide" }
+                    ].map(item => (
+                      <div key={item.text} className="flex items-center gap-3 text-gray-700">
+                        <span className="text-xl">{item.emoji}</span>
+                        <span className="text-sm">{item.text}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Annotation Color
-                    </label>
-                    <input 
-                      type="color"
-                      className="h-10 w-full"
-                      value={dashboardStats?.preferences?.defaultAnnotationColor || '#000000'}
-                      onChange={async (e) => {
-                        const response = await fetch('/api/dashboard', {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            preferences: {
-                              ...dashboardStats.preferences,
-                              defaultAnnotationColor: e.target.value
-                            }
-                          })
-                        })
-                        if (response.ok) {
-                          // Refresh dashboard data
-                          const { stats } = await (await fetch('/api/dashboard')).json()
-                          setDashboardStats(stats)
-                        }
-                      }}
-                    />
+                </div>
+
+                <div>
+                  <h3 className="font-medium text-sm text-gray-600 mb-2">Drawing Tools</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { emoji: "✌️", text: "Toggle drawing" },
+                      { emoji: "👊", text: "Pointer mode" },
+                      { emoji: "🖐️", text: "Eraser" },
+                      { emoji: "✋", text: "Highlighter" }
+                    ].map(item => (
+                      <div key={item.text} className="flex items-center gap-3 text-gray-700">
+                        <span className="text-xl">{item.emoji}</span>
+                        <span className="text-sm">{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-medium text-sm text-gray-600 mb-2">Actions</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { emoji: "↩️", text: "Undo" },
+                      { emoji: "↪️", text: "Redo" },
+                      { emoji: "💾", text: "Save" },
+                      { emoji: "⭕", text: "Draw circle" }
+                    ].map(item => (
+                      <div key={item.text} className="flex items-center gap-3 text-gray-700">
+                        <span className="text-xl">{item.emoji}</span>
+                        <span className="text-sm">{item.text}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
-          
-          {/* Recent Presentations */}
+
+          {/* Right Column: Recent Presentations */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex justify-between items-center mb-4">
@@ -173,6 +164,41 @@ export default function DashboardPage() {
               ) : (
                 <Loading className="h-48" message="Loading presentations..." />
               )}
+            </div>
+
+            {/* New Quick Actions Section */}
+            <div className="mt-6 bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => window.location.href = '/presentation/new'}
+                  className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <span className="text-xl">📝</span>
+                  <span className="text-sm font-medium">New Presentation</span>
+                </button>
+                <button
+                  onClick={() => window.location.href = '/presentation/whiteboard'}
+                  className="flex items-center gap-2 p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  <span className="text-xl">🎨</span>
+                  <span className="text-sm font-medium">Open Whiteboard</span>
+                </button>
+                <button
+                  onClick={() => window.location.href = '/settings/gestures'}
+                  className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                >
+                  <span className="text-xl">👋</span>
+                  <span className="text-sm font-medium">Gesture Settings</span>
+                </button>
+                <button
+                  onClick={() => window.location.href = '/help'}
+                  className="flex items-center gap-2 p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
+                >
+                  <span className="text-xl">❓</span>
+                  <span className="text-sm font-medium">Help Guide</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
