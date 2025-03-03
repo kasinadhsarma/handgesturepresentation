@@ -1,14 +1,14 @@
-import './globals.css'
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import { Toaster } from '@/components/ui/toaster'
-import { ToastProvider } from '@/context/toast-provider'
+import type React from "react"
+import "./globals.css"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: 'Gesture-Controlled Presentation',
-  description: 'Control your presentations with hand gestures',
+  title: "Hand Gesture Controlled Presentation Viewer",
+  description: "Control presentations with hand gestures and draw on slides in real-time",
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -18,12 +18,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <ToastProvider>
-          {children}
-          <Toaster />
-        </ToastProvider>
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   )
 }
+
+
+
+import './globals.css'

@@ -1,317 +1,206 @@
-'use client'
+"use client"
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { SlideViewer } from '@/components/presentation/slide-viewer'
-import { SlideControls } from '@/components/presentation/slide-controls'
-import { GestureDetector } from '@/components/gesture/gesture-detector'
-import { GestureVisualization } from '@/components/gesture/gesture-visualization'
-import { Whiteboard } from '@/components/whiteboard/whiteboard'
-import { ColorPicker } from '@/components/whiteboard/color-picker'
-import { ToolsPanel } from '@/components/whiteboard/tools-panel'
+import { useRef, useState } from "react"
+import { ArrowLeft, ArrowRight, Camera, Download, RotateCcw, RotateCw, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
-import { Save, RotateCcw, RotateCw } from 'lucide-react'
+import { Card } from "@/components/ui/card"
+import { Slider } from "@/components/ui/slider"
+import { cn } from "@/lib/utils"
+import { AdvancedGestureControls } from "@/components/advanced-gesture-controls"
 
-const GestureGuide = () => (
-  <div className="fixed bottom-28 left-8 bg-white/95 p-5 rounded-xl shadow-xl backdrop-blur-sm z-50 border border-gray-100">
-    <h3 className="font-bold mb-4 text-lg">Gesture Guide</h3>
-    <div className="grid grid-cols-2 gap-4">
-      <div>
-        <h4 className="font-medium text-sm text-gray-600 mb-2">Navigation</h4>
-        <ul className="text-sm space-y-3">
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">👆</span>
-            <span>Next slide</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">👇</span>
-            <span>Previous slide</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">👈</span>
-            <span>First slide</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">👉</span>
-            <span>Last slide</span>
-          </li>
-        </ul>
-      </div>
-      <div>
-        <h4 className="font-medium text-sm text-gray-600 mb-2">Drawing Tools</h4>
-        <ul className="text-sm space-y-3">
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">✌️</span>
-            <span>Toggle drawing</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">👊</span>
-            <span>Pointer mode</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">🖐️</span>
-            <span>Eraser</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">✋</span>
-            <span>Highlighter</span>
-          </li>
-        </ul>
-      </div>
-      <div>
-        <h4 className="font-medium text-sm text-gray-600 mb-2">Actions</h4>
-        <ul className="text-sm space-y-3">
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">↩️</span>
-            <span>Undo</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">↪️</span>
-            <span>Redo</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">💾</span>
-            <span>Save</span>
-          </li>
-          <li className="flex items-center gap-3 text-gray-700">
-            <span className="text-xl">⭕</span>
-            <span>Draw circle</span>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </div>
-)
+const COLORS = [
+  "#000000", // Black
+  "#FF0000", // Red
+  "#0000FF", // Blue
+  "#00FF00", // Green
+  "#FFFF00", // Yellow
+  "#800080", // Purple
+  "#FFA500", // Orange
+]
 
-const SlideCounter = ({ current, total }: { current: number; total: number }) => (
-  <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[70] flex items-center gap-2">
-    <div className="bg-white/95 px-4 py-2 rounded-full shadow-lg border border-gray-100 backdrop-blur-sm">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl font-bold text-primary">{current + 1}</span>
-        <div className="h-6 w-px bg-gray-200" />
-        <span className="text-sm text-gray-500">{total} slides</span>
-      </div>
-    </div>
-  </div>
-)
+const TOOLS = [
+  { id: "draw", label: "Draw" },
+  { id: "erase", label: "Erase" },
+  { id: "highlight", label: "Highlight" },
+  { id: "shapes", label: "Shapes" },
+]
 
-export default function PresentationPage({ params }: { params: { id: string } }) {
-  const [currentSlide, setCurrentSlide] = useState(0)
-  const [totalSlides, setTotalSlides] = useState(0)
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [currentTool, setCurrentTool] = useState('pointer')
-  const [currentColor, setCurrentColor] = useState('black')
+export default function PresentationView({ params }: { params: { id: string } }) {
+  const [currentSlide, setCurrentSlide] = useState(1)
+  const [totalSlides, setTotalSlides] = useState(10)
+  const [activeColor, setActiveColor] = useState(COLORS[0])
+  const [activeTool, setActiveTool] = useState<string | null>(null)
   const [brushSize, setBrushSize] = useState(5)
-  const { toast } = useToast()
-  const undoRef = useRef<() => void>(() => {})
+  const [isGestureActive, setIsGestureActive] = useState(false)
 
-  useEffect(() => {
-    const fetchPresentationData = async () => {
-      try {
-        // TODO: Fetch presentation data
-        setTotalSlides(10)
-      } catch (error) {
-        console.error('Error fetching presentation:', error)
-      }
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  const handleGestureDetected = (gesture: string, confidence: number) => {
+    console.log(`Gesture detected: ${gesture} (${confidence.toFixed(2)})`)
+    // Handle gesture actions
+  }
+
+  const handleNextSlide = () => {
+    if (currentSlide < totalSlides) {
+      setCurrentSlide(currentSlide + 1)
     }
+  }
 
-    if (params.id) {
-      fetchPresentationData()
+  const handlePrevSlide = () => {
+    if (currentSlide > 1) {
+      setCurrentSlide(currentSlide - 1)
     }
-  }, [params.id])
+  }
 
-  const toggleDrawing = useCallback(() => {
-    setIsDrawing((prev) => !prev)
-    setCurrentTool((prev) => prev === 'pointer' ? 'brush' : 'pointer')
-  }, [])
-
-  const handleSave = useCallback(() => {
-    toast("Slide saved successfully", "success", {
-      title: "Slide Saved",
-      description: "Your current slide and annotations have been saved."
-    })
-  }, [toast])
-
-  const [currentGesture, setCurrentGesture] = useState<string>('')
-  
-  const handleGesture = useCallback((gesture: string) => {
-    console.log('Processing gesture:', gesture)
-    setCurrentGesture(gesture)
-    
-    switch (gesture) {
-      case 'next':
-        setCurrentSlide(prev => {
-          const newSlide = Math.min(prev + 1, totalSlides - 1)
-          console.log(`Moving to next slide: ${newSlide}`)
-          return newSlide
-        })
-        toast("Moving to next slide", "info", {
-          title: "Navigation",
-          description: "Next slide"
-        })
-        break
-      case 'previous':
-        setCurrentSlide(prev => {
-          const newSlide = Math.max(prev - 1, 0)
-          console.log(`Moving to previous slide: ${newSlide}`)
-          return newSlide
-        })
-        toast("Moving to previous slide", "info", {
-          title: "Navigation",
-          description: "Previous slide"
-        })
-        break
-      case 'click':
-        toggleDrawing()
-        break
-      case 'pointer':
-        setCurrentTool('pointer')
-        setIsDrawing(false)
-        break
-      case 'draw':
-        setCurrentTool('brush')
-        setIsDrawing(true)
-        break
-      case 'erase':
-        setCurrentTool('eraser')
-        setIsDrawing(true)
-        break
-      case 'highlight':
-        setCurrentTool('highlighter')
-        setIsDrawing(true)
-        break
-      case 'stop':
-        // TODO: Implement stop presentation logic
-        break
-      case 'firstSlide':
-        setCurrentSlide(0)
-        break
-      case 'lastSlide':
-        setCurrentSlide(totalSlides - 1)
-        break
-      case 'undo':
-        undoRef.current()
-        break
-      case 'redo':
-        // TODO: Implement redo logic
-        break
-      case 'save':
-        handleSave()
-        break
-      case 'zoomIn':
-        // Implement zoom in
-        break
-      case 'zoomOut':
-        // Implement zoom out
-        break
-      case 'shapeCircle':
-        // Switch to circle drawing mode
-        break
-      // ...other shape gestures...
+  const handleSaveAnnotations = () => {
+    if (canvasRef.current) {
+      const dataUrl = canvasRef.current.toDataURL("image/png")
+      const link = document.createElement("a")
+      link.href = dataUrl
+      link.download = `slide-${currentSlide}-annotated.png`
+      link.click()
     }
-  }, [totalSlides, toast, handleSave, toggleDrawing])
-
-  // Debug current slide changes
-  useEffect(() => {
-    console.log('Current slide:', currentSlide)
-  }, [currentSlide])
+  }
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-      {/* Slide Counter */}
-      <SlideCounter current={currentSlide} total={totalSlides} />
+    <div className="flex min-h-screen bg-gray-50">
+      {/* Left Sidebar */}
+      <div className="w-64 bg-white border-r p-4 space-y-6">
+        {/* Colors */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Colors</h3>
+          <div className="grid grid-cols-4 gap-2">
+            {COLORS.map((color) => (
+              <button
+                key={color}
+                className={cn(
+                  "w-8 h-8 rounded-full border-2",
+                  activeColor === color ? "border-primary" : "border-transparent",
+                )}
+                style={{ backgroundColor: color }}
+                onClick={() => setActiveColor(color)}
+              />
+            ))}
+          </div>
+        </div>
 
-      {/* Main presentation area */}
-      <div className="absolute inset-0 flex items-center justify-center p-8">
-        {/* Remove old debug info and add status bar */}
-        <div className="fixed top-0 inset-x-0 h-12 bg-gradient-to-b from-black/20 to-transparent pointer-events-none" />
-        
-        <div className="relative w-full max-w-6xl h-[80vh] rounded-2xl overflow-hidden">
-          {params.id && (
-            <>
-              <SlideViewer 
-                id={params.id} 
-                currentSlide={currentSlide} 
-                totalSlides={totalSlides} 
-              />
-              <Whiteboard
-                isDrawing={isDrawing}
-                currentTool={currentTool}
-                currentColor={currentColor}
-                brushSize={brushSize}
-                onUndo={(undoFn: () => void) => { undoRef.current = undoFn }}
-              />
-            </>
-          )}
+        {/* Tools */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Tools</h3>
+          <div className="space-y-1">
+            {TOOLS.map((tool) => (
+              <button
+                key={tool.id}
+                className={cn(
+                  "w-full px-3 py-2 text-sm rounded-md text-left",
+                  activeTool === tool.id ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+                )}
+                onClick={() => setActiveTool(tool.id)}
+              >
+                {tool.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Brush Size */}
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <h3 className="text-sm font-medium">Brush Size</h3>
+            <span className="text-sm text-muted-foreground">{brushSize}px</span>
+          </div>
+          <Slider value={[brushSize]} min={1} max={20} step={1} onValueChange={(value) => setBrushSize(value[0])} />
+        </div>
+
+        {/* Gesture Guide */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Gesture Guide</h3>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 flex items-center justify-center bg-yellow-100 rounded">👆</span>
+              <span>Next slide</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 flex items-center justify-center bg-yellow-100 rounded">👈</span>
+              <span>Previous slide</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 flex items-center justify-center bg-yellow-100 rounded">✌️</span>
+              <span>Toggle drawing</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Floating controls - always on top */}
-      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-3 bg-white/95 rounded-full shadow-xl py-3 px-5 backdrop-blur-sm z-[60] border border-gray-100">
-        <SlideControls
-          currentSlide={currentSlide}
-          totalSlides={totalSlides}
-          onPrevious={() => handleGesture('previous')}
-          onNext={() => handleGesture('next')}
-        />
-        <div className="h-8 w-px bg-gray-200 mx-3" />
-        <div className="flex items-center gap-2">
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            onClick={toggleDrawing} 
-            className="hover:bg-gray-100 transition-colors"
-          >
-            {isDrawing ? <RotateCcw className="h-5 w-5" /> : <RotateCw className="h-5 w-5" />}
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <div className="h-16 border-b bg-white flex items-center justify-between px-6">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-semibold">Presentation #{params.id}</h1>
+            <div className="px-3 py-1 bg-gray-100 rounded-full text-sm">
+              {currentSlide} / {totalSlides} slides
+            </div>
+          </div>
+          <Button variant="outline" size="icon">
+            <Settings className="h-4 w-4" />
           </Button>
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            onClick={() => undoRef.current()} 
-            aria-label="Undo" 
-            className="hover:bg-gray-100 transition-colors"
-          >
-            <RotateCcw className="h-5 w-5" />
+        </div>
+
+        {/* Slide Area */}
+        <div className="flex-1 p-8 flex items-center justify-center">
+          <div className="relative w-full max-w-5xl aspect-[16/9] bg-white shadow-lg">
+            <img
+              src={`/placeholder.svg?height=720&width=1280&text=Slide ${currentSlide}`}
+              alt={`Slide ${currentSlide}`}
+              className="w-full h-full object-cover"
+            />
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+          </div>
+        </div>
+
+        {/* Bottom Controls */}
+        <div className="h-16 border-t bg-white flex items-center justify-center gap-4">
+          <div className="flex items-center gap-2 bg-white rounded-full border px-4 py-2">
+            <Button variant="ghost" size="icon" onClick={() => setCurrentSlide(1)}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium px-2">
+              {currentSlide} / {totalSlides}
+            </span>
+            <Button variant="ghost" size="icon" onClick={() => setCurrentSlide(totalSlides)}>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button variant="ghost" size="icon">
+            <RotateCcw className="h-4 w-4" />
           </Button>
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            onClick={handleSave} 
-            className="hover:bg-gray-100 transition-colors"
-          >
-            <Save className="h-5 w-5" />
+          <Button variant="ghost" size="icon">
+            <RotateCw className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleSaveAnnotations}>
+            <Download className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Gesture Visualization */}
-      <GestureVisualization gesture={currentGesture} />
-
-      {/* Left sidebar with tools and gesture guide */}
-      <div className="fixed top-8 left-8 flex flex-col gap-4 z-[60] w-[250px]">
-        <div className="bg-white/95 p-5 rounded-xl shadow-xl backdrop-blur-sm border border-gray-100">
-          <h3 className="font-medium mb-3 text-gray-700">Colors</h3>
-          <ColorPicker currentColor={currentColor} onColorChange={setCurrentColor} />
-        </div>
-        <div className="bg-white/95 p-5 rounded-xl shadow-xl backdrop-blur-sm border border-gray-100">
-          <h3 className="font-medium mb-3 text-gray-700">Tools</h3>
-          <ToolsPanel
-            currentTool={currentTool}
-            onToolChange={setCurrentTool}
-            brushSize={brushSize}
-            onBrushSizeChange={setBrushSize}
+      {/* Right Sidebar */}
+      <div className="w-80 bg-white border-l">
+        <div className="p-4">
+          <h3 className="text-sm font-medium mb-4">Hand Gesture Control</h3>
+          <Card className="overflow-hidden">
+            <div className="relative aspect-video bg-black">
+              <Camera className="absolute inset-0 m-auto h-8 w-8 text-gray-400" />
+            </div>
+          </Card>
+          <AdvancedGestureControls
+            onGestureDetected={handleGestureDetected}
+            isActive={isGestureActive}
+            onActiveChange={setIsGestureActive}
           />
-        </div>
-        <GestureGuide />
-      </div>
-
-      {/* Combined camera feed and gesture detection */}
-      <div className="fixed top-8 right-8 z-[60] flex flex-col gap-4">
-        <div className="bg-white/95 p-3 rounded-xl shadow-xl backdrop-blur-sm border border-gray-100">
-          <h3 className="font-medium mb-2 text-gray-700 text-sm">Hand Gesture Control</h3>
-          <GestureDetector onGesture={handleGesture} presentationId={params.id} />
         </div>
       </div>
     </div>
   )
 }
+

@@ -1,208 +1,187 @@
-'use client'
+"use client"
 
-import { PresentationUpload } from '@/components/dashboard/presentation-upload'
-import { RecentPresentations } from '@/components/dashboard/recent-presentations'
-import { UserProfile } from '@/components/profile/user-profile'
-import { useEffect, useState } from 'react'
-import type { DashboardStats, UserProfile as UserProfileType } from '@/types'
-import { Loading } from '@/components/ui/loading'
+import type React from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { FileUp, PlusCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
-export default function DashboardPage() {
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
-  const [userProfile, setUserProfile] = useState<UserProfileType | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function Dashboard() {
+  const router = useRouter();
+  const [presentations, setPresentations] = useState([
+    { id: 1, title: "Project Proposal", date: "2025-01-15", slides: 24 },
+    { id: 2, title: "Quarterly Results", date: "2025-01-10", slides: 18 },
+    { id: 3, title: "Team Meeting", date: "2025-01-05", slides: 12 },
+  ])
+  const [isDragging, setIsDragging] = useState(false)
 
+  // Check authentication on component mount
   useEffect(() => {
-    async function fetchDashboardData() {
+    const checkAuth = async () => {
       try {
-        const [statsResponse, profileResponse] = await Promise.all([
-          fetch('/api/dashboard'),
-          fetch('/api/user/profile')
-        ])
-
-        if (statsResponse.ok && profileResponse.ok) {
-          const { stats } = await statsResponse.json()
-          const profile = await profileResponse.json()
-          setDashboardStats(stats)
-          setUserProfile(profile)
+        const response = await fetch('/api/auth/check', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        if (!response.ok) {
+          router.push('/login');
         }
       } catch (error) {
-        console.error('Error fetching dashboard data:', error)
-      } finally {
-        setLoading(false)
+        router.push('/login');
+      }
+    };
+    checkAuth();
+  }, [router]);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = () => {
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      handleFileUpload(files)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handleFileUpload(files)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { 
+        method: 'POST',
+        credentials: 'include'
+      });
+      router.push('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  const handleFileUpload = async (files: FileList) => {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      if (file.name.endsWith(".ppt") || file.name.endsWith(".pptx")) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const response = await fetch('/api/presentations/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            setPresentations(prev => [{
+              id: result.id,
+              title: file.name.replace(/\.(ppt|pptx)$/, ""),
+              date: new Date().toISOString().split("T")[0],
+              slides: result.slideCount || Math.floor(Math.random() * 30) + 5,
+            }, ...prev]);
+          }
+        } catch (error) {
+          console.error('Upload failed:', error);
+        }
       }
     }
-
-    fetchDashboardData()
-  }, [])
+  }
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header Section with User Profile */}
-        <div className="mb-8 flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Presentations Dashboard</h1>
-            <p className="text-gray-600">Manage and view your recent presentations</p>
-          </div>
-          {userProfile && (
-            <div className="bg-white rounded-lg shadow p-4">
-              <UserProfile profile={userProfile} />
-            </div>
-          )}
+    <div className="flex flex-col min-h-screen">
+      <header className="px-6 py-3 border-b">
+        <div className="container flex items-center justify-between">
+          <h1 className="text-2xl font-bold">GestureSlide</h1>
+          <Button 
+            variant="ghost"
+            onClick={handleLogout}
+          >
+            Log out
+          </Button>
         </div>
-        
-        {/* Activity Summary */}
-        {dashboardStats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Presentations</h3>
-              <p className="text-3xl font-bold text-blue-600">
-                {dashboardStats.activity_summary.total_presentations}
-              </p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">Slides Viewed</h3>
-              <p className="text-3xl font-bold text-green-600">
-                {dashboardStats.activity_summary.total_slides_viewed}
-              </p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">Annotations Made</h3>
-              <p className="text-3xl font-bold text-purple-600">
-                {dashboardStats.activity_summary.total_annotations}
-              </p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">Active Streak</h3>
-              <p className="text-3xl font-bold text-orange-600">
-                {dashboardStats.activity_summary.active_days_streak} days
-              </p>
-            </div>
-          </div>
-        )}
+      </header>
+      <main className="flex-1 container py-8">
+        <h1 className="text-3xl font-bold mb-6">Your Presentations</h1>
 
-        {/* Updated Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Upload and Gesture Guide */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Upload Section */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Upload Presentation</h2>
-              <PresentationUpload />
-            </div>
+        <div
+          className={`mb-8 border-2 border-dashed rounded-lg p-8 text-center ${
+            isDragging ? "border-primary bg-primary/5" : "border-gray-300"
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <FileUp className="mx-auto h-12 w-12 text-gray-400" />
+          <h2 className="mt-2 text-xl font-semibold">Upload Presentation</h2>
+          <p className="mt-1 text-sm text-gray-500">Drag and drop your .ppt or .pptx files here, or click to browse</p>
 
-            {/* New Gesture Guide Section */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Gesture Guide</h2>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-medium text-sm text-gray-600 mb-2">Navigation</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      { emoji: "👆", text: "Next slide" },
-                      { emoji: "👇", text: "Previous slide" },
-                      { emoji: "👈", text: "First slide" },
-                      { emoji: "👉", text: "Last slide" }
-                    ].map(item => (
-                      <div key={item.text} className="flex items-center gap-3 text-gray-700">
-                        <span className="text-xl">{item.emoji}</span>
-                        <span className="text-sm">{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-medium text-sm text-gray-600 mb-2">Drawing Tools</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      { emoji: "✌️", text: "Toggle drawing" },
-                      { emoji: "👊", text: "Pointer mode" },
-                      { emoji: "🖐️", text: "Eraser" },
-                      { emoji: "✋", text: "Highlighter" }
-                    ].map(item => (
-                      <div key={item.text} className="flex items-center gap-3 text-gray-700">
-                        <span className="text-xl">{item.emoji}</span>
-                        <span className="text-sm">{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-medium text-sm text-gray-600 mb-2">Actions</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    {[
-                      { emoji: "↩️", text: "Undo" },
-                      { emoji: "↪️", text: "Redo" },
-                      { emoji: "💾", text: "Save" },
-                      { emoji: "⭕", text: "Draw circle" }
-                    ].map(item => (
-                      <div key={item.text} className="flex items-center gap-3 text-gray-700">
-                        <span className="text-xl">{item.emoji}</span>
-                        <span className="text-sm">{item.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Recent Presentations */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Recent Presentations</h2>
-                <button className="text-sm text-blue-600 hover:text-blue-800">
-                  View All
-                </button>
-              </div>
-              {!loading && dashboardStats ? (
-                <RecentPresentations presentations={dashboardStats.recent_presentations} />
-              ) : (
-                <Loading className="h-48" message="Loading presentations..." />
-              )}
-            </div>
-
-            {/* New Quick Actions Section */}
-            <div className="mt-6 bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => window.location.href = '/presentation/new'}
-                  className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <span className="text-xl">📝</span>
-                  <span className="text-sm font-medium">New Presentation</span>
-                </button>
-                <button
-                  onClick={() => window.location.href = '/presentation/whiteboard'}
-                  className="flex items-center gap-2 p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                >
-                  <span className="text-xl">🎨</span>
-                  <span className="text-sm font-medium">Open Whiteboard</span>
-                </button>
-                <button
-                  onClick={() => window.location.href = '/settings/gestures'}
-                  className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
-                >
-                  <span className="text-xl">👋</span>
-                  <span className="text-sm font-medium">Gesture Settings</span>
-                </button>
-                <button
-                  onClick={() => window.location.href = '/help'}
-                  className="flex items-center gap-2 p-3 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
-                >
-                  <span className="text-xl">❓</span>
-                  <span className="text-sm font-medium">Help Guide</span>
-                </button>
-              </div>
-            </div>
+          <div className="mt-4">
+            <Label htmlFor="file-upload" className="sr-only">
+              Choose file
+            </Label>
+            <Input
+              id="file-upload"
+              name="file-upload"
+              type="file"
+              accept=".ppt,.pptx"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <Button asChild>
+              <label htmlFor="file-upload">Browse files</label>
+            </Button>
           </div>
         </div>
-      </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {presentations.map((presentation) => (
+            <Card 
+              key={presentation.id}
+              className="h-full cursor-pointer transition-all hover:shadow-md"
+              onClick={() => router.push(`/presentation/${presentation.id}`)}
+            >
+              <CardContent className="p-6">
+                <div className="aspect-video bg-gray-100 rounded flex items-center justify-center mb-4">
+                  {presentation.title.charAt(0)}
+                </div>
+                <h3 className="font-medium">{presentation.title}</h3>
+                <div className="flex justify-between text-sm text-gray-500 mt-2">
+                  <span>{presentation.date}</span>
+                  <span>{presentation.slides} slides</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          <Card 
+            className="h-full border-dashed cursor-pointer"
+            onClick={() => router.push('/presentation/create')}
+          >
+            <CardContent className="p-6 h-full flex flex-col items-center justify-center text-center">
+              <PlusCircle className="h-8 w-8 text-gray-400 mb-2" />
+              <h3 className="font-medium">Create New Presentation</h3>
+              <p className="text-sm text-gray-500 mt-1">Start from scratch</p>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
     </div>
   )
 }
