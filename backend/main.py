@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import math
+import torch
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -42,7 +43,83 @@ DISTANCE_THRESHOLD = 0.1
 class GestureProcessor:
     def __init__(self):
         self.prev_landmarks = None
+        self.model = None
+        self.load_model()
         
+    def load_model(self):
+        try:
+            self.model = GestureRecognitionModel(num_classes=10)
+            self.model.load_state_dict(torch.load('pretrained_gesture_model.pth'))
+            self.model.eval()
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            print("Falling back to rule-based gesture recognition")
+    
+    def preprocess_frame(self, frame):
+        # Preprocess frame for model input
+        frame = cv2.resize(frame, (224, 224))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = frame.transpose((2, 0, 1)) / 255.0
+        return torch.FloatTensor(frame).unsqueeze(0)
+    
+    def recognize_gesture(self, landmarks: list, frame=None) -> Tuple[str, float, dict]:
+        if not landmarks:
+            return "no_gesture", 0.0, {}
+            
+        # Try model-based recognition first
+        if self.model is not None and frame is not None:
+            try:
+                input_tensor = self.preprocess_frame(frame)
+                with torch.no_grad():
+                    output = self.model(input_tensor)
+                    confidence, predicted = torch.max(output, 1)
+                    gesture_idx = predicted.item()
+                    gesture_map = {
+                        0: "point_right",  # Next slide
+                        1: "point_left",   # Previous slide
+                        2: "pointer",      # Display pointer
+                        3: "palm_out",     # Erase drawing
+                        4: "stop",         # Stop presentation
+                        5: "open_hand",    # First slide
+                        6: "peace",        # Last slide
+                        7: "draw",         # Draw on screen
+                        8: "save",         # Save slide/drawing
+                        9: "highlight"     # Highlight text
+                    }
+                    return gesture_map[gesture_idx], confidence.item(), {}
+            except Exception as e:
+                print(f"Model inference error: {e}")
+                
+        # Fallback to rule-based recognition
+        normalized_landmarks = self.normalize_landmarks(landmarks)
+        thumb_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['THUMB'])
+        index_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['INDEX'])
+        middle_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['MIDDLE'])
+        ring_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['RING'])
+        pinky_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['PINKY'])
+        
+        dx, dy = self.get_palm_direction(landmarks)
+        palm_facing_up = dy < -DISTANCE_THRESHOLD
+        
+        # Basic gesture detection logic
+        if index_extended and not (thumb_extended or middle_extended or ring_extended or pinky_extended):
+            return "point_right", 0.95, {}
+            
+        if pinky_extended and not (thumb_extended or index_extended or middle_extended or ring_extended):
+            return "point_left", 0.95, {}
+            
+        if index_extended and middle_extended and not (thumb_extended or ring_extended or pinky_extended):
+            return "draw", 0.9, {}
+            
+        if all([thumb_extended, index_extended, middle_extended, ring_extended, pinky_extended]):
+            return "open_hand", 0.95, {}
+            
+        if not any([thumb_extended, index_extended, middle_extended, ring_extended, pinky_extended]):
+            return "stop", 0.95, {}
+            
+        self.prev_landmarks = landmarks
+        return "no_gesture", 0.0, {}
+
     def is_finger_extended(self, landmarks: list, finger_indices: list) -> bool:
         finger_tip = landmarks[finger_indices[-1]]
         finger_base = landmarks[finger_indices[0]]
@@ -73,85 +150,8 @@ class GestureProcessor:
             
         return [type('Landmark', (), {'x': p[0], 'y': p[1], 'z': p[2]}) for p in points]
 
-    def recognize_gesture(self, landmarks: list) -> Tuple[str, float, dict]:
-        if not landmarks:
-            return "no_gesture", 0.0, {}
-
-        # Normalize landmarks to make detection more robust
-        normalized_landmarks = self.normalize_landmarks(landmarks)
-
-        # Check finger extensions
-        thumb_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['THUMB'])
-        index_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['INDEX'])
-        middle_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['MIDDLE'])
-        ring_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['RING'])
-        pinky_extended = self.is_finger_extended(normalized_landmarks, FINGER_INDICES['PINKY'])
-
-        # Get palm direction
-        dx, dy = self.get_palm_direction(landmarks)
-        palm_facing_up = dy < -DISTANCE_THRESHOLD
-        palm_facing_left = dx < -DISTANCE_THRESHOLD
-        palm_facing_right = dx > DISTANCE_THRESHOLD
-
-        # Navigation gestures
-        if index_extended and not (thumb_extended or middle_extended or ring_extended or pinky_extended):
-            return "nextSlide", 0.95, {}
-        
-        if pinky_extended and not (thumb_extended or index_extended or middle_extended or ring_extended):
-            return "previousSlide", 0.95, {}
-
-        # Drawing gestures
-        if index_extended and middle_extended and not (thumb_extended or ring_extended or pinky_extended):
-            fingers_close = self.calculate_finger_distance(landmarks, FINGER_INDICES['INDEX'], FINGER_INDICES['MIDDLE']) < DISTANCE_THRESHOLD
-            if fingers_close:
-                return "shape", 0.9, {}
-            return "draw", 0.9, {}
-
-        if thumb_extended and not (index_extended or middle_extended or ring_extended or pinky_extended):
-            return "erase", 0.9, {}
-
-        # Control gestures
-        if all([thumb_extended, index_extended, middle_extended, ring_extended, pinky_extended]):
-            return "pointer", 0.95, {}
-
-        if not any([thumb_extended, index_extended, middle_extended, ring_extended, pinky_extended]):
-            return "stop", 0.95, {}
-
-        # Check for sequence-based gestures if we have previous landmarks
-        if self.prev_landmarks is not None:
-            # Zoom gestures
-            if index_extended and thumb_extended:
-                prev_distance = self.calculate_finger_distance(self.prev_landmarks, FINGER_INDICES['THUMB'], FINGER_INDICES['INDEX'])
-                curr_distance = self.calculate_finger_distance(landmarks, FINGER_INDICES['THUMB'], FINGER_INDICES['INDEX'])
-                if abs(curr_distance - prev_distance) > DISTANCE_THRESHOLD:
-                    scale = curr_distance / prev_distance
-                    return ("zoomIn" if curr_distance > prev_distance else "zoomOut", 
-                           0.85, 
-                           {"scale": scale})
-
-            # Rotation gestures (for undo/redo)
-            if palm_facing_up:
-                rotation = self.calculate_rotation(self.prev_landmarks, landmarks)
-                if abs(rotation) > math.pi/4:  # 45 degrees
-                    return ("undo" if rotation > 0 else "redo", 0.85, {})
-
-            # First/Last slide gestures
-            if palm_facing_left and index_extended and middle_extended:
-                return "firstSlide", 0.88, {}
-            if palm_facing_right and index_extended and middle_extended:
-                return "lastSlide", 0.88, {}
-
-        self.prev_landmarks = landmarks
-        return "no_gesture", 0.0, {}
-
     def calculate_finger_distance(self, landmarks: list, finger1: list, finger2: list) -> float:
         tip1 = landmarks[finger1[-1]]
-        tip2 = landmarks[finger2[-1]]
-        return math.sqrt((tip1.x - tip2.x)**2 + (tip1.y - tip2.y)**2)
-
-    def calculate_rotation(self, prev_landmarks: list, curr_landmarks: list) -> float:
-        prev_angle = math.atan2(prev_landmarks[12].y - prev_landmarks[0].y, 
-                               prev_landmarks[12].x - prev_landmarks[0].x)
         curr_angle = math.atan2(curr_landmarks[12].y - curr_landmarks[0].y,
                                curr_landmarks[12].x - curr_landmarks[0].x)
         return curr_angle - prev_angle
