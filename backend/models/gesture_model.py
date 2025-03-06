@@ -23,6 +23,10 @@ class GestureRecognitionModel(nn.Module):
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
+            
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
         )
         
         # Fully connected layers
@@ -33,6 +37,7 @@ class GestureRecognitionModel(nn.Module):
             nn.Dropout(0.5),
             nn.Linear(4096, 1024),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
             nn.Linear(1024, num_classes)
         )
 
@@ -58,4 +63,3 @@ class GestureDataset(torch.utils.data.Dataset):
         
     def __getitem__(self, idx):
         return self.landmarks[idx], self.labels[idx]
-
