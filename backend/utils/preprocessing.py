@@ -9,7 +9,15 @@ def preprocess_landmarks(landmarks) -> np.ndarray:
     points = []
     for landmark in landmarks.landmark:
         points.append([landmark.x, landmark.y, landmark.z])
-    return np.array(points).flatten()
+    points = np.array(points)
+    
+    # Normalize landmarks
+    points = normalize_landmarks(points)
+    
+    # Additional preprocessing steps
+    points = points.flatten()
+    
+    return points
 
 def load_dataset(dataset_path: str) -> Tuple[np.ndarray, np.ndarray]:
     """Load and preprocess dataset from given path."""
@@ -111,4 +119,3 @@ def normalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     normalized = centered / scale
     
     return normalized.flatten()
-

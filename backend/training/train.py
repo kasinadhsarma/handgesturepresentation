@@ -10,6 +10,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.gesture_model import GestureRecognitionModel, GestureDataset
+from utils.preprocessing import augment_data
 
 def prepare_data(data_dir, img_size=(224, 224)):
     """Prepare training data from directory structure"""
@@ -120,13 +121,17 @@ if __name__ == '__main__':
     print("Preparing training data...")
     landmarks, labels = prepare_data(args.data_dir)
     
+    # Data augmentation
+    print("Applying data augmentation...")
+    landmarks, labels = augment_data(landmarks, labels)
+    
     # Split data
     from sklearn.model_selection import train_test_split
     train_landmarks, val_landmarks, train_labels, val_labels = train_test_split(
         landmarks, labels, test_size=0.2, random_state=42)
     
     # Create datasets
-    train_dataset = GestureDataset(train_landmarks, train_labels)
+    train_dataset = Gesture dataset(train_landmarks, train_labels)
     val_dataset = GestureDataset(val_landmarks, val_labels)
     
     # Create data loaders
@@ -136,4 +141,3 @@ if __name__ == '__main__':
     # Initialize and train model
     model = GestureRecognitionModel(num_classes=10)
     train_model(model, train_loader, val_loader, num_epochs=args.num_epochs, device=args.device)
-
